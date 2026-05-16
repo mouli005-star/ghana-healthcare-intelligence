@@ -1,5 +1,5 @@
 # 🏥 Ghana Healthcare Intelligence System
-**Databricks × Accenture Hackathon 2024 | Virtue Foundation Track**
+**Databricks × Accenture Hackathon 2026 | Virtue Foundation Track**
 
 ---
 
@@ -81,6 +81,8 @@ Raw CSV (987 rows)
 | Planning UI | ipywidgets (notebook-native chat) |
 
 ---
+
+<!-- Optional voice mode removed -->
 
 ## 🗂️ Notebooks Guide
 

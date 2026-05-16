@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Overview",
+    "embed_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/embed/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266",
+    "view_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266"
+  },
+  {
+    "name": "Intervention Planning",
+    "embed_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/embed/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266",
+    "view_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266"
+  },
+  {
+    "name": "Data Quality",
+    "embed_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/embed/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266",
+    "view_url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266"
+  }
+]

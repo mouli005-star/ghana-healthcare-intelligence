@@ -11,12 +11,21 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
+# Voice mode removed — voice assistant files deleted on user request
+
 
 ROOT = Path(__file__).resolve().parent
 DATA_PACKAGE_PATH = ROOT / "ghana_data_package.json"
 CSV_PATH = ROOT / "Virtue Foundation Ghana v0.3 - Sheet1 (1).csv"
 MAP_PATH = ROOT / "ghana_health_map (1).html"
 ENV_PATH = ROOT / ".env"
+DEFAULT_DASHBOARD_EMBED_URL = "https://dbc-2c6d5247-de8a.cloud.databricks.com/embed/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266"
+DEFAULT_DASHBOARD_VIEW_URL = "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266"
+DEFAULT_DASHBOARD_CATALOG = [
+    {"name": "Overview", "embed_url": DEFAULT_DASHBOARD_EMBED_URL, "view_url": DEFAULT_DASHBOARD_VIEW_URL},
+    {"name": "Intervention Planning", "embed_url": DEFAULT_DASHBOARD_EMBED_URL, "view_url": DEFAULT_DASHBOARD_VIEW_URL},
+    {"name": "Data Quality", "embed_url": DEFAULT_DASHBOARD_EMBED_URL, "view_url": DEFAULT_DASHBOARD_VIEW_URL},
+]
 
 
 def load_local_env(env_path: Path) -> None:
@@ -74,8 +83,7 @@ def build_data_context(package: dict, facilities: pd.DataFrame) -> str:
         "GHANA HEALTHCARE INTELLIGENCE DATA CONTEXT",
         "Use only the facts below. If the data does not support a claim, say so clearly.",
         "",
-        "Summary statistics:",
-        f"- Total facilities: {safe_int(stats.get('total'))}",
+            f"- Total facilities: {safe_int(stats.get('total'))}",
         f"- Hospitals: {safe_int(stats.get('hospitals'))}",
         f"- Clinics: {safe_int(stats.get('clinics'))}",
         f"- NGOs: {safe_int(stats.get('ngos'))}",
@@ -171,8 +179,7 @@ def search_facilities(question: str, facilities: pd.DataFrame, limit: int = 6) -
         score = sum(1 for term in terms if term in haystack)
         if score:
             scored_rows.append((score, row))
-
-    scored_rows.sort(key=lambda item: (-item[0], str(item[1].get("name", ""))))
+        # Voice Assistant view removed
 
     results: list[dict] = []
     for _, row in scored_rows[:limit]:
@@ -193,12 +200,15 @@ def search_facilities(question: str, facilities: pd.DataFrame, limit: int = 6) -
 
 def build_messages(question: str, history: list[dict], context: str, matches: list[dict]) -> list[dict]:
     system_prompt = (
-        "You are the Ghana Healthcare Intelligence assistant for a hackathon demo. "
-        "Answer in plain English and keep the answer grounded in the provided context. "
+        "You are Ama, the Ghana Healthcare planning agent and assistant. "
+        "Carry a natural conversation, remember the recent turn history, and answer in plain English. "
+        "Ground every claim in the provided context and matching facilities. "
+        "When the user asks for planning help, give specific, actionable recommendations. "
         "Return only valid JSON with this structure: "
         '{"answer":"string","findings":[{"point":"string","citation":"string"}],'
         '"recommendations":["string"],"confidence":{"level":"HIGH|MEDIUM|LOW","score":0.0,"reason":"string"}}. '
         "Use the regional snapshot and matching facilities when relevant. "
+        "Never mention that you are a demo. "
         "If the question cannot be fully answered from the context, say what is missing."
     )
 
@@ -275,13 +285,13 @@ def render_header(package: dict) -> None:
         <div class="hero-shell">
             <div class="hero-copy">
                 <div class="eyebrow">Virtue Foundation Ghana</div>
-                <h1>Healthcare intelligence in one shared demo</h1>
+                <h1>Healthcare intelligence in one shared workspace</h1>
                 <p>
                     Ask the LLM about medical access, identify gaps by region, and inspect the
                     interactive map without leaving the page.
                 </p>
             </div>
-            <div class="hero-badge">Hackathon-ready UI</div>
+            <div class="hero-badge">Planning workspace</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -312,12 +322,7 @@ def render_map() -> None:
 def load_dashboard_urls() -> list[dict[str, str]]:
     dashboard_config = ROOT / "databricks_dashboards.json"
     if not dashboard_config.exists():
-        return [
-            {
-                "name": "Overview",
-                "url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266&embedded=true",
-            }
-        ]
+        return DEFAULT_DASHBOARD_CATALOG
 
     try:
         content = json.loads(dashboard_config.read_text(encoding="utf-8"))
@@ -327,58 +332,55 @@ def load_dashboard_urls() -> list[dict[str, str]]:
     if not isinstance(content, list):
         return []
 
-    dashboards = [item for item in content if isinstance(item, dict) and item.get("name") and item.get("url")]
+    dashboards: list[dict[str, str]] = []
+    for item in content:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+
+        embed_url = item.get("embed_url") or item.get("url") or DEFAULT_DASHBOARD_EMBED_URL
+        view_url = item.get("view_url") or item.get("url") or DEFAULT_DASHBOARD_VIEW_URL
+        dashboards.append({"name": item["name"], "embed_url": embed_url, "view_url": view_url})
+
     if dashboards:
         return dashboards
 
-    return [
-        {
-            "name": "Overview",
-            "url": "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266&embedded=true",
-        }
-    ]
+    return DEFAULT_DASHBOARD_CATALOG
 
 
-def ensure_embedded_dashboard_url(url: str) -> str:
-    parsed = urlparse(url)
-    query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    query_items["embedded"] = "true"
-    normalized = parsed._replace(query=urlencode(query_items, doseq=True))
-    return urlunparse(normalized)
-
-
-def render_dashboard_iframe(url: str) -> None:
-    embed_url = ensure_embedded_dashboard_url(url)
-    components.html(
+def render_dashboard_access_card(name: str, view_url: str) -> None:
+    st.markdown(
         f"""
-        <iframe
-            src="{embed_url}"
-            style="width: 100%; min-height: 760px; border: 0; border-radius: 16px; background: white;"
-            loading="lazy"
-            referrerpolicy="no-referrer"
-            allowfullscreen
-        ></iframe>
+        <div class="dashboard-access-card">
+            <div class="dashboard-access-title">{name}</div>
+            <div class="dashboard-access-text">
+                Databricks embedding is disabled for this workspace. Open the dashboard in Databricks after signing in.
+            </div>
+        </div>
         """,
-        height=800,
-        scrolling=True,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<a class='dashboard-link-button' href=\"{view_url}\" target=\"_blank\" rel=\"noopener noreferrer\">Open {name} in Databricks</a>",
+        unsafe_allow_html=True,
     )
 
 
 def get_dashboard_catalog() -> list[dict[str, str]]:
     catalog = load_dashboard_urls()
-    default_url = "https://dbc-2c6d5247-de8a.cloud.databricks.com/dashboardsv3/01f13f9cd3fb1357b5abd5e152034084?o=7474647497852266&embedded=true"
     page_names = ["Overview", "Intervention Planning", "Data Quality"]
 
     if not catalog:
-        catalog = [{"name": page_names[0], "url": default_url}]
+        catalog = DEFAULT_DASHBOARD_CATALOG
 
-    catalog_by_name = {item["name"]: item["url"] for item in catalog}
+    catalog_by_name = {item["name"]: item for item in catalog}
     pages: list[dict[str, str]] = []
     for index, page_name in enumerate(page_names):
+        item = catalog_by_name.get(page_name, catalog[0] if catalog else DEFAULT_DASHBOARD_CATALOG[0])
         pages.append(
             {
                 "name": page_name,
-                "url": catalog_by_name.get(page_name, catalog[0]["url"] if catalog else default_url),
+                "embed_url": item.get("embed_url", DEFAULT_DASHBOARD_EMBED_URL),
+                "view_url": item.get("view_url", DEFAULT_DASHBOARD_VIEW_URL),
             }
         )
 
@@ -540,13 +542,34 @@ def inject_styles() -> None:
             font-weight: 700;
         }
 
-        .dashboard-frame {
-            width: 100%;
-            min-height: 760px;
+        .dashboard-access-card {
+            background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 16px;
-            overflow: hidden;
-            background: #ffffff;
+            padding: 1rem 1.1rem;
+            margin: 0.75rem 0 1rem;
+        }
+
+        .dashboard-access-title {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 0.35rem;
+        }
+
+        .dashboard-access-text {
+            color: #475569;
+            margin-bottom: 0.9rem;
+        }
+
+        .dashboard-link-button {
+            display: inline-block;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            background: #0f4c81;
+            color: #ffffff !important;
+            text-decoration: none;
+            font-weight: 700;
         }
 
         .stChatMessage {
@@ -613,7 +636,6 @@ def main() -> None:
                     st.caption(
                         f"Confidence: {confidence.get('level', 'LOW')} | {confidence.get('score', 0)} | {confidence.get('reason', '')}"
                     )
-            
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -631,7 +653,6 @@ def main() -> None:
                 st.info("Regional summaries will appear here after the data package loads.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # Move the chat input to the bottom of the Assistant view so it appears after the content
         if "pending_question" in st.session_state:
             st.session_state.assistant_input = st.session_state.pop("pending_question")
 
@@ -667,6 +688,9 @@ def main() -> None:
                 )
 
             st.session_state.history.append({"question": question, "answer": answer})
+
+    # Voice Assistant view removed
+
     elif view == "Map":
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Interactive map")
@@ -685,21 +709,19 @@ def main() -> None:
     elif view == "Dashboards":
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Databricks dashboards")
-        st.caption("Three page tabs are shown below. Replace the URLs in databricks_dashboards.json with the exact Databricks page links if you want them to differ.")
+        st.caption("Databricks embedding is disabled in this workspace, so the dashboards open directly in Databricks. Users with access can sign in and view them there.")
 
         st.markdown(
             "<div class='dashboard-warning'>"
-            "Databricks account required: You must be signed in to Databricks to view some dashboards inline. "
-            "If a dashboard is private or requires an active Databricks session, the app will show a link you can open in a new tab."
+            "This workspace does not allow dashboard embedding. The direct Databricks link below is the reliable way to view each dashboard."
             "</div>",
             unsafe_allow_html=True,
         )
 
         st.markdown(
             "<div class='dashboard-note'>"
-            "Only dashboards that are shared and reachable in a browser can be embedded here. "
-            "If embedding fails, click the link below to open the page directly in Databricks (new tab). "
-            "Ask your Databricks admin to allowlist this app's origin for embed permission if you need inline viewing."
+            "The app keeps the dashboard links in databricks_dashboards.json so you can replace them without changing the UI code. "
+            "If your workspace admin later enables embedding, this view can be changed back to inline iframes."
             "</div>",
             unsafe_allow_html=True,
         )
@@ -708,18 +730,7 @@ def main() -> None:
         page_tabs = st.tabs([item["name"] for item in dashboards])
         for tab, dashboard in zip(page_tabs, dashboards):
             with tab:
-                url = ensure_embedded_dashboard_url(dashboard.get("url", ""))
-                # Show an explicit clickable link that opens in a new tab
-                st.markdown(
-                    f"<div style='margin-bottom:0.5rem;'>"
-                    f"<a href=\"{dashboard.get('url', '')}\" target=\"_blank\" rel=\"noopener noreferrer\" "
-                    f"style=\"display:inline-block;padding:0.5rem 0.9rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:#eaf2ff;text-decoration:none;\">"
-                    f"Open {dashboard.get('name')} in Databricks</a>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                # Also show the embed attempt (iframe). If it fails due to auth, user can use the link above.
-                render_dashboard_iframe(url)
+                render_dashboard_access_card(dashboard.get("name", "Dashboard"), dashboard.get("view_url", ""))
 
         st.markdown('</div>', unsafe_allow_html=True)
 
