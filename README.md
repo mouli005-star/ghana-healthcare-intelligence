@@ -112,8 +112,8 @@ AI to surface actionable medical desert intelligence.
 
 ## 🔗 Live Demo
 
-Databricks Workspace: [your workspace URL]
-Dashboard: (https://ghana-healthcare-intelligence.streamlit.app/)
+- Databricks Workspace: (https://dbc-2c6d5247-de8a.cloud.databricks.com/browse/folders/1110193454993087?o=7474647497852266)
+- Dashboard: (https://ghana-healthcare-intelligence.streamlit.app/)
 ---
 
 ## 👥 Team (Group 6)
