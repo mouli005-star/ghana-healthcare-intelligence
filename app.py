@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 import json
 import os
 import re
@@ -202,6 +203,7 @@ def build_messages(question: str, history: list[dict], context: str, matches: li
     system_prompt = (
         "You are Ama, the Ghana Healthcare planning agent and assistant. "
         "Carry a natural conversation, remember the recent turn history, and answer in plain English. "
+        "Write a clear, conversational 3-5 sentence answer for a non-technical NGO coordinator. "
         "Ground every claim in the provided context and matching facilities. "
         "When the user asks for planning help, give specific, actionable recommendations. "
         "Return only valid JSON with this structure: "
@@ -209,7 +211,10 @@ def build_messages(question: str, history: list[dict], context: str, matches: li
         '"recommendations":["string"],"confidence":{"level":"HIGH|MEDIUM|LOW","score":0.0,"reason":"string"}}. '
         "Use the regional snapshot and matching facilities when relevant. "
         "Never mention that you are a demo. "
-        "If the question cannot be fully answered from the context, say what is missing."
+        "If the question cannot be fully answered from the context, say what is missing. "
+        "Findings must always include 3-5 factual points with citations to a specific facility or region and exact field/value used. "
+        "Recommendations must always include 2-4 concrete actions and each one must include the action, responsible actor, priority tag, and a short implementation step or measurable success metric. "
+        "Confidence should explain whether the data is complete, partial, or sparse and should be based on the evidence available."
     )
 
     messages = [
@@ -263,6 +268,108 @@ def ask_assistant(question: str, history: list[dict], context: str, matches: lis
     result.setdefault("recommendations", [])
     result.setdefault("confidence", {"level": "LOW", "score": 0.0, "reason": "Incomplete model response"})
     return result
+
+
+def _format_multiline(text: object) -> str:
+    return escape(str(text)).replace("\n", "<br>")
+
+
+def render_welcome_html() -> str:
+    return """
+    <div class="vf-wrap">
+      <div class="vf-chat">
+        <div class="vf-welcome">
+          <div class="vf-welcome-icon">🏥</div>
+          <div class="vf-welcome-title">Ghana Healthcare Planning Assistant</div>
+          <div class="vf-welcome-sub">
+            I have complete data on 797 facilities across Ghana's 16 regions.<br>
+            Every answer includes findings with data citations,<br>
+            actionable recommendations, and a confidence assessment.
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+
+
+def render_user_message_html(question: str) -> str:
+    return f"""
+    <div class="vf-wrap">
+      <div class="vf-chat">
+        <div class="vf-message vf-message-user">
+          <div class="vf-avatar-user">🙂</div>
+          <div class="vf-message-bubble vf-message-bubble-user">{_format_multiline(question)}</div>
+        </div>
+      </div>
+    </div>
+    """
+
+
+def render_bot_response_html(result: dict) -> str:
+    answer = _format_multiline(result.get("answer", ""))
+    findings = result.get("findings", [])
+    recommendations = result.get("recommendations", [])
+    confidence = result.get("confidence", {})
+
+    conf_level = str(confidence.get("level", "MEDIUM"))
+    try:
+        conf_score = float(confidence.get("score", 0.5))
+    except Exception:
+        conf_score = 0.5
+    conf_reason = _format_multiline(confidence.get("reason", ""))
+
+    conf_color = {"HIGH": "#4caf50", "MEDIUM": "#ff9800", "LOW": "#f44336"}.get(conf_level, "#ff9800")
+    conf_bar_pct = max(0, min(100, int(conf_score * 100)))
+
+    html = [
+        "<div class=\"vf-wrap\"><div class=\"vf-chat\"><div class=\"vf-response-wrap\">",
+        "<div class=\"vf-response-header\"><div class=\"vf-avatar-bot\">🏥</div>",
+        "<div class=\"vf-response-label\">Healthcare Assistant · Ghana Intelligence System</div></div>",
+        f"<div class=\"vf-card-answer\"><div class=\"vf-card-header\">🔵 &nbsp; ANSWER</div><div class=\"vf-answer-text\">{answer}</div></div>",
+    ]
+
+    if findings:
+        findings_items = []
+        for index, finding in enumerate(findings, 1):
+            point = _format_multiline(finding.get("point", ""))
+            citation = _format_multiline(finding.get("citation", ""))
+            citation_html = f"<div class=\"vf-citation\">📎 {citation}</div>" if citation else ""
+            findings_items.append(
+                f"<div class=\"vf-finding-item\"><div class=\"vf-finding-point\"><span class=\"vf-finding-num\">{index}</span>{point}</div>{citation_html}</div>"
+            )
+
+        html.append(
+            f"<div class=\"vf-card-findings\"><div class=\"vf-card-header\">🔎 &nbsp; FINDINGS ({len(findings)} data points)</div>{''.join(findings_items)}</div>"
+        )
+
+    if recommendations:
+        recommendation_items = []
+        for index, recommendation in enumerate(recommendations, 1):
+            recommendation_items.append(
+                f"<div class=\"vf-rec-item\"><div class=\"vf-rec-num\">{index}</div><div>{_format_multiline(recommendation)}</div></div>"
+            )
+
+        html.append(
+            f"<div class=\"vf-card-recommendations\"><div class=\"vf-card-header\">✅ &nbsp; RECOMMENDATIONS ({len(recommendations)} actions)</div>{''.join(recommendation_items)}</div>"
+        )
+
+    html.append(
+        f"<div class=\"vf-card-confidence\"><div class=\"vf-conf-badge\" style=\"background:{conf_color}22;border:1px solid {conf_color};color:{conf_color};\">{escape(conf_level)}</div><div style=\"flex:1;\"><div class=\"vf-conf-bar-wrap\"><div class=\"vf-conf-bar\" style=\"width:{conf_bar_pct}%;background:{conf_color};\"></div></div></div><div class=\"vf-conf-score\">{conf_bar_pct}%</div><div class=\"vf-conf-reason\">{conf_reason}</div></div>"
+    )
+    html.append("</div></div></div>")
+    return "".join(html)
+
+
+def render_conversation_html(history: list[dict]) -> str:
+    if not history:
+        return render_welcome_html()
+
+    blocks: list[str] = []
+    for entry in history:
+        blocks.append(render_user_message_html(entry.get("question", "")))
+        blocks.append(render_bot_response_html(entry.get("answer", {})))
+
+    return "".join(blocks)
 
 
 def render_metric(label: str, value: object, help_text: str) -> None:
@@ -572,6 +679,227 @@ def inject_styles() -> None:
             font-weight: 700;
         }
 
+        .vf-wrap {
+            margin-top: 0.75rem;
+        }
+
+        .vf-chat {
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+
+        .vf-welcome {
+            background: #08111d;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 1rem 1rem 0.95rem;
+            color: #eaf2ff;
+        }
+
+        .vf-welcome-icon {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .vf-welcome-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            margin-bottom: 0.35rem;
+        }
+
+        .vf-welcome-sub {
+            font-size: 0.92rem;
+            color: rgba(234,242,255,0.82);
+            line-height: 1.65;
+        }
+
+        .vf-message {
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-start;
+        }
+
+        .vf-message-bubble {
+            flex: 1;
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+            line-height: 1.65;
+            font-size: 0.96rem;
+        }
+
+        .vf-message-user {
+            justify-content: flex-start;
+        }
+
+        .vf-message-bubble-user {
+            background: #1f2430;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #f3f7ff;
+        }
+
+        .vf-avatar-user,
+        .vf-avatar-bot {
+            width: 2rem;
+            height: 2rem;
+            min-width: 2rem;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            line-height: 1;
+        }
+
+        .vf-avatar-user {
+            background: #ff3b30;
+            color: white;
+        }
+
+        .vf-avatar-bot {
+            background: #ff9800;
+            color: white;
+        }
+
+        .vf-response-wrap {
+            background: #08111d;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 1rem;
+            color: #eaf2ff;
+        }
+
+        .vf-response-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .vf-response-label {
+            font-size: 0.82rem;
+            color: #90a4b8;
+            font-weight: 700;
+        }
+
+        .vf-card-answer,
+        .vf-card-findings,
+        .vf-card-recommendations,
+        .vf-card-confidence {
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 0.7rem;
+        }
+
+        .vf-card-answer {
+            background: #0d2137;
+            border-left: 3px solid #42a5f5;
+        }
+
+        .vf-card-findings {
+            background: #040c18;
+            border-left: 3px solid #1565c0;
+        }
+
+        .vf-card-recommendations {
+            background: #040c18;
+            border-left: 3px solid #00c853;
+        }
+
+        .vf-card-confidence {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: #040c18;
+        }
+
+        .vf-card-header {
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
+            margin-bottom: 0.65rem;
+        }
+
+        .vf-answer-text {
+            color: #e3f2fd;
+            font-size: 0.96rem;
+            line-height: 1.75;
+        }
+
+        .vf-finding-item {
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 1px solid #0d2137;
+        }
+
+        .vf-finding-item:last-child,
+        .vf-rec-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .vf-finding-point,
+        .vf-citation,
+        .vf-rec-item,
+        .vf-conf-reason {
+            color: #b0bec5;
+            font-size: 0.86rem;
+            line-height: 1.65;
+        }
+
+        .vf-finding-num,
+        .vf-rec-num {
+            display: inline-flex;
+            width: 1.3rem;
+            height: 1.3rem;
+            margin-right: 0.45rem;
+            border-radius: 999px;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.08);
+            color: #eaf2ff;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .vf-rec-item {
+            display: flex;
+            gap: 0.7rem;
+            margin-bottom: 0.75rem;
+            align-items: flex-start;
+        }
+
+        .vf-conf-badge {
+            border-radius: 0.5rem;
+            padding: 0.28rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 800;
+            min-width: 4rem;
+            text-align: center;
+        }
+
+        .vf-conf-bar-wrap {
+            width: 100%;
+            background: rgba(255,255,255,0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            height: 0.5rem;
+        }
+
+        .vf-conf-bar {
+            height: 100%;
+            border-radius: 999px;
+        }
+
+        .vf-conf-score {
+            font-weight: 800;
+            color: #eaf2ff;
+            min-width: 3rem;
+            text-align: right;
+        }
+
         .stChatMessage {
             border-radius: 18px;
         }
@@ -616,26 +944,16 @@ def main() -> None:
                 if prompt_cols[index % 2].button(prompt, use_container_width=True):
                     st.session_state.pending_question = prompt
 
-            for entry in st.session_state.history:
-                with st.chat_message("user"):
-                    st.markdown(entry["question"])
-                with st.chat_message("assistant"):
-                    st.markdown(entry["answer"].get("answer", "No answer returned."))
-                    if entry["answer"].get("findings"):
-                        with st.expander("Findings"):
-                            for finding in entry["answer"].get("findings", []):
-                                st.markdown(f"- {finding.get('point', '')}")
-                                citation = finding.get("citation", "")
-                                if citation:
-                                    st.caption(citation)
-                    if entry["answer"].get("recommendations"):
-                        with st.expander("Recommendations"):
-                            for recommendation in entry["answer"].get("recommendations", []):
-                                st.markdown(f"- {recommendation}")
-                    confidence = entry["answer"].get("confidence", {})
-                    st.caption(
-                        f"Confidence: {confidence.get('level', 'LOW')} | {confidence.get('score', 0)} | {confidence.get('reason', '')}"
-                    )
+            if "pending_question" in st.session_state:
+                st.session_state.assistant_input = st.session_state.pop("pending_question")
+
+            question = st.chat_input("Ask about the Ghana healthcare system", key="assistant_input")
+            if question:
+                matches = search_facilities(question, facilities)
+                answer = ask_assistant(question, st.session_state.history, context, matches)
+                st.session_state.history.append({"question": question, "answer": answer})
+
+            st.markdown(render_conversation_html(st.session_state.history), unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -652,42 +970,6 @@ def main() -> None:
             else:
                 st.info("Regional summaries will appear here after the data package loads.")
             st.markdown('</div>', unsafe_allow_html=True)
-
-        if "pending_question" in st.session_state:
-            st.session_state.assistant_input = st.session_state.pop("pending_question")
-
-        question = st.chat_input("Ask about the Ghana healthcare system", key="assistant_input")
-        if question:
-            matches = search_facilities(question, facilities)
-            with st.chat_message("user"):
-                st.markdown(question)
-
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    answer = ask_assistant(question, st.session_state.history, context, matches)
-                st.markdown(answer.get("answer", "No answer returned."))
-
-                findings = answer.get("findings", [])
-                if findings:
-                    with st.expander("Findings"):
-                        for finding in findings:
-                            st.markdown(f"- {finding.get('point', '')}")
-                            citation = finding.get("citation", "")
-                            if citation:
-                                st.caption(citation)
-
-                recommendations = answer.get("recommendations", [])
-                if recommendations:
-                    with st.expander("Recommendations"):
-                        for recommendation in recommendations:
-                            st.markdown(f"- {recommendation}")
-
-                confidence = answer.get("confidence", {})
-                st.caption(
-                    f"Confidence: {confidence.get('level', 'LOW')} | {confidence.get('score', 0)} | {confidence.get('reason', '')}"
-                )
-
-            st.session_state.history.append({"question": question, "answer": answer})
 
     # Voice Assistant view removed
 
