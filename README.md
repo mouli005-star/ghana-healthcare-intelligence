@@ -26,21 +26,8 @@ AI to surface actionable medical desert intelligence.
 ---
 
 ## 🏗️ Architecture
-Raw CSV (987 rows)
-↓
-[Bronze Delta Table] — Raw ingestion, null cleaning, typo fixes
-↓
-[Silver Delta Table] — Deduplication → 797 unique facilities + geocoding
-↓
-[IDP Agent] — GPT-4o extracts procedure/equipment/capability from unstructured text
-↓
-[Silver Enriched] — 260+ facilities now have structured clinical facts
-↓
-[Capability Flags] — 13 boolean flags per facility (has_emergency, has_surgery...)
-↓
-[Gold Delta Table] — MDI scores, deployment priority, distance calculations
-↓
-[Dashboard + Map + Planning Assistant]
+<img width="1693" height="929" alt="image" src="https://github.com/user-attachments/assets/fb9c2d04-2d38-4e07-ae1c-1d67c94e906d" />
+
 
 ---
 
@@ -129,9 +116,13 @@ Databricks Workspace: [your workspace URL]
 Dashboard: (https://ghana-healthcare-intelligence.streamlit.app/)
 ---
 
-## 👥 Team
+## 👥 Team (Group 6)
 
-- [Your Name] — [Your College/Institution]
+- Burugula Chandra Mouli
+- JAYACHANDRA UPARAPU
+- Udaykumar
+- Johan Koshy
+- Shourya Teja Reddy
 
 ---
 
