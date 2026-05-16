@@ -372,6 +372,26 @@ def render_conversation_html(history: list[dict]) -> str:
     return "".join(blocks)
 
 
+def render_thinking_html(question: str) -> str:
+        return f"""
+        <div class="vf-wrap">
+            <div class="vf-chat">
+                <div class="vf-message vf-message-user">
+                    <div class="vf-avatar-user">🙂</div>
+                    <div class="vf-message-bubble vf-message-bubble-user">{_format_multiline(question)}</div>
+                </div>
+                <div class="vf-response-wrap">
+                    <div class="vf-response-header">
+                        <div class="vf-avatar-bot">🏥</div>
+                        <div class="vf-response-label">Healthcare Assistant · Analyzing data...</div>
+                    </div>
+                    <div class="vf-thinking">⏳ &nbsp; Searching 797 facilities and 16 regions for your answer...</div>
+                </div>
+            </div>
+        </div>
+        """
+
+
 def render_metric(label: str, value: object, help_text: str) -> None:
     st.markdown(
         f"""
@@ -791,6 +811,12 @@ def inject_styles() -> None:
             margin-bottom: 0.7rem;
         }
 
+        .vf-thinking {
+            color: #c8d7e6;
+            padding: 0.4rem 0.1rem 0.15rem;
+            font-size: 0.95rem;
+        }
+
         .vf-card-answer {
             background: #0d2137;
             border-left: 3px solid #42a5f5;
@@ -944,31 +970,26 @@ def main() -> None:
                 if prompt_cols[index % 2].button(prompt, use_container_width=True):
                     st.session_state.pending_question = prompt
 
+            st.markdown(render_conversation_html(st.session_state.history), unsafe_allow_html=True)
+
             if "pending_question" in st.session_state:
                 st.session_state.assistant_input = st.session_state.pop("pending_question")
 
             question = st.chat_input("Ask about the Ghana healthcare system", key="assistant_input")
             if question:
                 matches = search_facilities(question, facilities)
-                answer = ask_assistant(question, st.session_state.history, context, matches)
+                st.markdown(render_thinking_html(question), unsafe_allow_html=True)
+                with st.spinner("Thinking..."):
+                    answer = ask_assistant(question, st.session_state.history, context, matches)
                 st.session_state.history.append({"question": question, "answer": answer})
-
-            st.markdown(render_conversation_html(st.session_state.history), unsafe_allow_html=True)
+                st.rerun()
 
             st.markdown('</div>', unsafe_allow_html=True)
 
         with right:
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            st.subheader("Ready-made talking points")
-            if package.get("regions"):
-                for region in package.get("regions", [])[:6]:
-                    with st.container():
-                        st.markdown(f"**{region.get('name', 'Unknown')}**")
-                        st.caption(
-                            f"MDI {region.get('mdi', 'n/a')} | alert {region.get('alert', 'n/a')} | missing: {', '.join(region.get('missing', [])) or 'None'}"
-                        )
-            else:
-                st.info("Regional summaries will appear here after the data package loads.")
+            st.subheader("How to use")
+            st.caption("Pick a view, ask a question from the bottom bar, and the answer will stack above with findings, recommendations, and confidence.")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # Voice Assistant view removed
