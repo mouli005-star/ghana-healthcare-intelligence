@@ -105,8 +105,7 @@ AI to surface actionable medical desert intelligence.
 ---
 
 ## 📹 Demo
-
-[Link to your 5-minute demo video]
+https://drive.google.com/file/d/1bgZgLR8SV2mX6kYZ5CRtVb9g8bEkr-Iv/view?usp=sharing
 
 ---
 
